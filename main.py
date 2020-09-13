@@ -3,137 +3,10 @@ import numpy as np
 import math
 import sys
 import kdtree
-import numpy_groupies as npg
-import unittest
-import cmath
 
-file_path = "/home/joey/Documents/color2.jpg"
-filter_size = 7
-
-
-# ---------------------------------------------definition of kdtree------------------------------------------------------------------------
-class KdtreeNode:
-    x = 0
-    y = 0
-    depth = 0
-    SpherePoint = []
-    left = None
-    right = None
-
-    def __init__(self, x: int, y: int, depth: int, SpherePoint: [3]):
-        self.x = x
-        self.y = y
-        self.depth = depth
-        self.SpherePoint = SpherePoint
-
-    def setLeft(self, left):
-        self.left = left
-
-    def setRight(self, right):
-        self.right = right
-
-
-def NewKdtreeNode(r, phi, theta, row, col, dep):
-    sphePoint = [r, phi, theta]
-    node = KdtreeNode(row, col, dep, sphePoint)
-    node.setLeft(None)
-    node.setRight(None)
-    return node
-
-
-def InsertNode(root, r, phi, theta, x, y, dep):
-    if root is None:
-        return KdtreeNode(x, y, dep, [r, phi, theta])
-    if dep % 2 == 0:
-        if phi < root.SpherePoint[1]:
-            root.left = InsertNode(root.left, r, phi, theta, x, y, dep + 1)
-        else:
-            root.right = InsertNode(root.right, r, phi, theta, x, y, dep + 1)
-
-    if dep % 2 != 0:
-        if theta < root.SpherePoint[2]:  
-            root.left = InsertNode(root.left, r, phi, theta, x, y, dep + 1)
-        else:
-            root.right = InsertNode(root.right, r, phi, theta, x, y, dep + 1)
-    return root
-
-
-def build_kdtree(sphere, img):
-    root = None
-    row, col, _ = img.shape
-    print(len(sphere[2]))
-    print((row - 1) * col + col - 1)
-    for i in range(row):
-        for j in range(col):
-            cur = i * col + j
-            root = InsertNode(root, sphere[0][cur], sphere[1][cur], sphere[2][cur], i, j, 0)
-
-    return root
-
-
-# Root First
-def KdtreeErgodic(root: KdtreeNode):
-    result = []
-    ptr = root
-    stack = []
-    while (not ptr is None) or len(stack) != 0:
-        while not ptr is None:
-            result.append(ptr)
-            stack.append(ptr)
-            ptr = ptr.left
-        if len(stack) != 0:
-            ptr = stack.pop()
-            ptr = ptr.right
-
-    return result
-
-
-def getDepth(root):
-    depth = 0
-    ergodic = KdtreeErgodic(root)
-    for node in ergodic:
-        if node.depth > depth:
-            depth = node.depth
-    return depth
-
-
-# ---------------------------------------------end kdtree----------------------------------------------------------------------------------
-
-def clusterHazeline(root, dep):
-    ergodic = KdtreeErgodic(root)
-    hazeline = []
-
-    for node in ergodic:
-        if node.depth == dep:
-            hazeline.append(node)
-    return hazeline
-
-
-# alter Rectangle system to Spherical coordinate system
-def get_sphere(rect, img):
-    row, col, _ = img.shape
-    r = [0] * (row * col)
-    phi = [0] * (row * col)
-    theta = [0] * (row * col)
-
-    for i in range(row):
-        for j in range(col):
-            cur = i * col + j
-            # cal r
-            r[cur] = math.sqrt(math.pow(rect[0][cur], 2) + math.pow(rect[1][cur], 2) + math.pow(rect[2][cur], 2))
-            # cal phi
-            if rect[0][cur] == 0:
-                phi[cur] = (180 / math.pi) * math.atan(float(rect[1][cur]) / 0.000001)
-            else:
-                phi[cur] = (180 / math.pi) * math.atan(float(rect[1][cur]) / float(rect[0][cur]))
-            # cal theta
-            if r[cur] == 0:
-                theta[cur] = math.acos(rect[2][cur] / (r[cur] + 0.000001)) * 180 / math.pi
-            else:
-                theta[cur] = math.acos(rect[2][cur] / r[cur]) * 180 / math.pi
-    sphere = [r, phi, theta]
-    return sphere
-
+file_path = "/home/joey/Documents/tiananmen.png"
+filter_size = 15
+p = 0
 
 # calculate r g b value - air.(r/g/b) respectivly
 # and save them in an array named rectangle
@@ -148,50 +21,43 @@ def getDistAirlight(img, air):
     return dist_from_airlight
 
 
-def dark_channel(im, sz):
+def dark_channel(im, sz) :
     b, g, r = cv2.split(im)
-    dc = cv2.min(cv2.min(r, g), b);
+    dc = cv2.min(cv2.min(r, g), b)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (sz, sz))
     dark = cv2.erode(dc, kernel)
     cv2.imshow('dark', dark)
     return dark
 
 
+def get_trans(img, dark, atom, w = 0.95):
+    x = img / atom
+    p = 0.12
+    t = 1 - w * dark
+    return t
+
+
 def air_light(im, dark):
     [h, w] = im.shape[:2]
     image_size = h * w
     numpx = int(max(math.floor(image_size / 1000), 1))
-    darkvec = dark.reshape(image_size, 1);
-    imvec = im.reshape(image_size, 3);
+    darkvec = dark.reshape(image_size, 1)
+    imvec = im.reshape(image_size, 3)
 
-    indices = darkvec.argsort();
+    indices = darkvec.argsort()
     indices = indices[image_size - numpx::]
 
     atmsum = np.zeros([1, 3])
     for ind in range(1, numpx):
         atmsum = atmsum + imvec[indices[ind]]
 
-    A = atmsum / numpx;
+    A = atmsum / numpx
     return A
 
 
-def sampleLayerNum(root, samplePoint):
-    ergodic = KdtreeErgodic(root)
-
-    for i in range(getDepth(root)):
-        num = 0
-        for node in ergodic:
-            if node.depth == i:
-                num += 1
-        if num > samplePoint:
-            return i
-
-
-def non_local_dehazing(img, AirlightAdjust, samplePoint):
+def non_local_transmission(img, air):
     ## find airlight first (same method with DCP)
-    dark = dark_channel(img, filter_size)
-    air = air_light(img, dark)
-    air = air[0]
+
     # for i in range(len(air)):
     #     air[i] = air[i] / 255
 
@@ -226,39 +92,103 @@ def non_local_dehazing(img, AirlightAdjust, samplePoint):
     cluster = [[]] * n_points
     for i in range(n_points) :
         cluster[i] = []
+    # save pixel in img cluster to which point (index)
+    cluster_Points = np.zeros(row * col, dtype=np.int)
 
     for r in range(len(dist_unit_radius)) :
         kdNode = mdl.search_knn(dist_unit_radius[r], 1)
-        findPosition(kdNode[0][0].data, dist_sphere_radius[r], cluster, points)
-    print(cluster[15][0])
+        findPosition(kdNode[0][0].data, dist_sphere_radius[r], cluster, points, r, cluster_Points)
+
     # how to use the data
     # print(lines[0][0][0].data[0])
 
     ## Estimating Initial Transmission
     # Estimate radius as the maximal radius in each haze-line (Eq. (11))
-    maxRadius = [[]] * n_points
+    maxRadius = np.zeros(row * col, dtype=np.float)
     for i in range(n_points) :
         # find max radius
         maxR = 0
         for j in range(len(cluster[i])) :
             maxR = max(maxR, cluster[i][j])
-        maxRadius[i] = [maxR]
-    print(maxRadius)
+        maxRadius[i] = maxR
 
+    # Initial Transmission
+    # save maxRadius to all pixels
+    dist_sphere_maxRadius = np.zeros(row * col, np.float)
+    for i in range(row * col) :
+        index = cluster_Points[i]
+        dist_sphere_maxRadius[i] = maxRadius[index]
+    transmission_estimation = dist_sphere_radius / dist_sphere_maxRadius
+
+    # Limit the transmission to the range [trans_min, 1] for numerical stability
+    trans_min = 0.1
+
+    # ## Regularization
+    # # Apply lower bound from the image (Eqs. (13-14)
+    trans_lower_bound = np.zeros((row * col), dtype=float)
+
+    for i in range(row) :
+        for j in range(col) :
+            m = min(img[i][j][0]/air[0], img[i][j][1]/air[1], img[i][j][2]/air[2])
+            trans_lower_bound[i * col + j] = 1 - m + p
+
+    for i in range(len(transmission_estimation)) :
+        transmission_estimation[i] = min(max(transmission_estimation[i], trans_lower_bound[i], trans_min), 1)
+
+    # Solve optimization problem (Eq. (15))
+    # find bin counts for reliability - small bins (#pixels<50) do not comply with
+    # the model assumptions and should be disregarded
+    bin_count = np.zeros(n_points, int)
+    for index in cluster_Points :
+        bin_count[index] += 1
+
+    bin_count_map = np.zeros((row, col), np.int)
+    for i in range(row * col) :
+        index = cluster_Points[i]
+        bin_count_map[int(i/col)][int(i%col)] = bin_count[index]
+    ##############################################################################################
+
+
+    return transmission_estimation
 
 # cluster into 1000length arr
-def findPosition(kdNode, radius, cluster, points) :
+def findPosition(kdNode, radius, cluster, points, r, cluster_Points) :
     for i in range(len(points)) :
         if (points[i][0] == kdNode[0]) and (points[i][1] == kdNode[1]) and (points[i][2] == kdNode[2]) :
             cluster[i].append(radius)
+            cluster_Points[r] = i
             break
+
+def non_local_dehazing(img, transmission_estimission, air) :
+    row, col, _ = img.shape
+    trans = np.reshape(transmission_estimission, (row, col))
+    print(trans)
+    cv2.imshow("estim", trans)
+    result = np.empty_like(img, dtype=float)
+    for i in range(3):
+        # result[:, :, i] = (img[:, :, i]/255 - air[i]/255) / trans + air[i]/255
+        result[:, :, i] = (img[:, :, i] - air[i])/255 / (trans) + air[i]/255
+    return result
+
 
 def main():
     img = cv2.imread(file_path)
     cv2.imshow("input_image", img)
-    non_local_dehazing(img, 1, 1000)
+    dark = dark_channel(img, filter_size)
+    air = air_light(img, dark)
+    air = air[0]
 
-
+    trans = get_trans(img, dark/255, air[0])
+    cv2.imshow("trans_DCP", trans)
+    transmission_estimission = non_local_transmission(img, air)
+    print("est")
+    print(transmission_estimission)
+    clear_img = non_local_dehazing(img, transmission_estimission, air)
+    print("  ")
+    print("DCP")
+    clear_img2 = non_local_dehazing(img, trans, air)
+    cv2.imshow("result", clear_img)
+    cv2.imshow("result2", clear_img2)
 
 
 if __name__ == '__main__':
