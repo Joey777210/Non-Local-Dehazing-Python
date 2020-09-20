@@ -6,8 +6,11 @@ import kdtree
 import scipy.sparse as sparse
 import scipy.sparse.linalg as sl
 from scipy import optimize
+from scipy import linalg
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import spsolve
 
-file_path = "/home/joey/Documents/tiananmen.png"
+file_path = "/home/joey/Documents/trees.png"
 filter_size = 15
 p = 0
 
@@ -228,15 +231,6 @@ def wls_filter(in_, data_term_weight, guidance, lambda_=0.1, alpha=2, small_num=
     in_row1 = np.min(in_, axis=0)
 
     data_weight[1, reliability_mask] = 0.8
-    # temp indicates in_row1(reliability_mask)
-    # print(reliability_mask)
-    # temp = []
-    # for i in range(len(reliability_mask)) :
-    #     index = reliability_mask[i]
-    #     print(index)
-        # temp[i] = in_row1[index]
-        # print(temp[i])
-        # print("--------------")
 
     for i in range(h) :
         for j in range(w) :
@@ -246,13 +240,9 @@ def wls_filter(in_, data_term_weight, guidance, lambda_=0.1, alpha=2, small_num=
     Adata = sparse.spdiags(data_weight.flatten(), 0, k, k)
     A = Asmoothness + Adata
     b = Adata * in_.flatten()
-    # x, info = sl.cg(A=A, b=b)
 
-    # x = optimize.leastsq(A, b)
-    # x = optimize.nnls(A.tocsr(), b)
-    X = sparse.linalg.inv(A)
-    # X = np.linalg.inv(A.toarray()).dot(b)
-    # x = x.reshape(in_.shape)
+    X = spsolve(A, b)
+
     out = np.reshape(X, (h, w))
     print(out)
     return out
