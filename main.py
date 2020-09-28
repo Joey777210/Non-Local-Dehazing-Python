@@ -6,7 +6,7 @@ import kdtree
 import scipy.sparse as sparse
 from scipy.sparse.linalg import spsolve
 
-file_path = "/home/joey/Documents/pumpkins_input.png"
+file_path = "../Pics/city_input.png"
 filter_size = 15
 p = 0
 
@@ -256,14 +256,14 @@ def findPosition(kdNode, radius, cluster, points, r, cluster_Points):
             break
 
 
-def non_local_dehazing(img, transmission_estimission, air):
+def dark_channel_dehazing(img, transmission, air):
     img = img / 255
     air = air
     row, col, _ = img.shape
-    # print(trans)
+
     result = np.empty_like(img, dtype=float)
     for i in range(3):
-        result[:, :, i] = ((img[:, :, i] - air[i]) / transmission_estimission) + air[i]
+        result[:, :, i] = ((img[:, :, i] - air[i]) / transmission) + air[i]
     return result
 
 
@@ -305,17 +305,14 @@ def main():
     air = air[0] / 255
 
     # trans DCP
-    trans = get_trans(img, dark / 255, air[0])
-    # cv2.imshow("trans_DCP", trans)
+    # trans = get_trans(img, dark / 255, air[0])
 
     # trans Nonl-Local
     transmission_estimission = non_local_transmission(img_gray, air)
 
     clear_img = dehaze(img, img_gray, transmission_estimission, air)
-    clear_img2 = non_local_dehazing(img, transmission_estimission, air)
     # clear_img2 = non_local_dehazing(img, trans, air)
     cv2.imshow("result", clear_img)
-    cv2.imshow("result2", clear_img2)
     cv2.imshow("non-local transmission", transmission_estimission)
 
 
