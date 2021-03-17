@@ -1,4 +1,4 @@
-# Non-Local Dehazing Python Implyment
+# Non-Local Dehazing - Python Implementation
 ## Introduction
 This code is the repreduction of the paper 
 [Berman_Non-Local_Image_Dehazing -_CVPR_2016](https://openaccess.thecvf.com/content_cvpr_2016/papers/Berman_Non-Local_Image_Dehazing_CVPR_2016_paper.pdf)
