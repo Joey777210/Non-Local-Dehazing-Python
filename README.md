@@ -3,10 +3,10 @@
 This code is the repreduction of the paper 
 [Berman_Non-Local_Image_Dehazing -_CVPR_2016](https://openaccess.thecvf.com/content_cvpr_2016/papers/Berman_Non-Local_Image_Dehazing_CVPR_2016_paper.pdf)
 ## Compile Dependencies
-* Python
-* Numpy
-* OpenCV
-* scipy.sparse
+* Python 3.6
+* Numpy 1.19.1
+* OpenCV  4.4.0.42
+* scipy.sparse 1.5.2
 * kdtree [Click Here](https://github.com/stefankoegl/kdtree)
 
 ## Examples
