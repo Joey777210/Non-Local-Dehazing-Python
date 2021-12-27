@@ -66,5 +66,4 @@ def wls_filter(in_, data_term_weight, guidance, lambda_=0.05, small_num=0.00001)
     X = spsolve(A, b)
 
     out = np.reshape(X, [h, w], order='F')
-    np.savetxt("./out.txt", out, fmt="%0.5f", delimiter="\t")
     return out

@@ -4,8 +4,9 @@ import sys
 import kdtree
 import utils
 import wls
+import regularization
 
-file_path = "../Pics/city_input.png"
+file_path = "./Pics/city_input.png"
 filter_size = 15
 # 修正参数, 每个簇都应该有一个，初始化为随机数，根据启发式算法调节
 p = 0
@@ -14,8 +15,10 @@ p = 0
 def non_local_transmission(img, air, gamma=1):
     # find airlight first (same method with DCP)
     img_hazy_corrected = np.power(img, gamma)
+
     # img = img / 255
     dist_from_airlight = utils.getDistAirlight(img_hazy_corrected, air)
+
     row, col, n_colors = img.shape
 
     # Calculate radius(Eq.(5))
@@ -75,64 +78,16 @@ def non_local_transmission(img, air, gamma=1):
         dist_sphere_maxRadius[i] = maxRadius[index]
     radius_new = np.reshape(dist_sphere_maxRadius, [row, col], order='F')
 
-    transmission_estimation = radius / radius_new
+    transmission_estimation = radius / (radius_new + p)
 
     # Limit the transmission to the range [trans_min, 1] for numerical stability
     trans_min = 0.1
 
-    # for i in range(row):
-    #     for j in range(col):
-    #         transmission_estimation = min(max(transmission_estimation[i][j], trans_min), 1)
     transmission_estimation = np.minimum(np.maximum(transmission_estimation, trans_min), 1)
-    # ## Regularization
-    # # Apply lower bound from the image (Eqs. (13-14)
-    trans_lower_bound = np.zeros([row, col], dtype=float)
-
-    for i in range(row):
-        for j in range(col):
-            m = min(img_hazy_corrected[i][j][0] / air[0], img_hazy_corrected[i][j][1] / air[1],
-                    img_hazy_corrected[i][j][2] / air[2])
-            trans_lower_bound[i][j] = 1 - m + p
-
-    transmission_estimation = np.maximum(transmission_estimation, trans_lower_bound)
-
-    # Solve optimization problem (Eq. (15))
-    # find bin counts for reliability - small bins (#pixels<50) do not comply with
-    # the model assumptions and should be disregarded
-    bin_count = np.zeros(n_points, int)
-    for index in cluster_Points:
-        bin_count[index] += 1
-
-    bin_count_map = np.zeros((row, col), np.int)
-    radius_std = np.zeros((row, col), np.float)
-
-    K_std = np.zeros(n_points, np.float)
-    for i in range(n_points):
-        if len(cluster[i]) > 0:
-            K_std[i] = np.std(cluster[i])
-
-    for i in range(row * col):
-        index = cluster_Points[i]
-        bin_count_map[int(i / col)][int(i % col)] = bin_count[index]
-        radius_std[int(i / col)][int(i % col)] = K_std[index]
-
-    max_radius_std = np.max(radius_std)
-    temp = radius_std / max_radius_std - 0.1
-    temp = np.where(temp > 0.001, temp, 0.001) * 3
-
-    radius_reliability = np.where(temp > 1, 1, temp)
-
-    temp2 = np.where(bin_count_map > 1, 1, bin_count_map / 50)
-
-    data_term_weight = temp2 * radius_reliability
-    lambd = 0.1
-
-    trans = np.reshape(transmission_estimation, (row, col), order='F')
-
-    transmission = wls.wls_filter(trans, data_term_weight, img_hazy_corrected.astype(np.float32), lambd)
-
+    
+    transmission = regularization.regularization(row, col, transmission_estimation, img_hazy_corrected, n_points, air,
+                                  cluster_Points, cluster)
     return transmission
-
 
 # cluster into 1000length arr
 def findPosition(kdNode, radius, cluster, points, r, cluster_Points):
