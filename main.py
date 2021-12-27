@@ -1,67 +1,21 @@
 import cv2
 import numpy as np
-import math
 import sys
 import kdtree
-import scipy.sparse as sparse
-from scipy.sparse.linalg import spsolve
+import utils
+import wls
 
 file_path = "../Pics/city_input.png"
 filter_size = 15
+# 修正参数, 每个簇都应该有一个，初始化为随机数，根据启发式算法调节
 p = 0
 
 
-# calculate r g b value - air.(r/g/b) respectivly
-# and save them in an array named rectangle
-# It means a rectangle coordinate system which airlight as the original point
-def getDistAirlight(img, air):
-    row, col, n_colors = img.shape
-
-    dist_from_airlight = np.zeros((row, col, n_colors), dtype=np.float)
-    for color in range(n_colors):
-        dist_from_airlight[:, :, color] = img[:, :, color] - air[color]
-
-    return dist_from_airlight
-
-
-def dark_channel(im, sz):
-    b, g, r = cv2.split(im)
-    dc = cv2.min(cv2.min(r, g), b)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (sz, sz))
-    dark = cv2.erode(dc, kernel)
-    return dark
-
-
-def get_trans(img, dark, atom, w=0.95):
-    x = img / atom
-    p = 0.12
-    t = 1 - w * dark
-    return t
-
-
-def air_light(im, dark):
-    [h, w] = im.shape[:2]
-    image_size = h * w
-    numpx = int(max(math.floor(image_size / 1000), 1))
-    darkvec = dark.reshape(image_size, 1)
-    imvec = im.reshape(image_size, 3)
-
-    indices = darkvec.argsort()
-    indices = indices[image_size - numpx::]
-
-    atmsum = np.zeros([1, 3])
-    for ind in range(1, numpx):
-        atmsum = atmsum + imvec[indices[ind]]
-
-    A = atmsum / numpx
-    return A
-
-
 def non_local_transmission(img, air, gamma=1):
-    ## find airlight first (same method with DCP)
+    # find airlight first (same method with DCP)
     img_hazy_corrected = np.power(img, gamma)
     # img = img / 255
-    dist_from_airlight = getDistAirlight(img_hazy_corrected, air)
+    dist_from_airlight = utils.getDistAirlight(img_hazy_corrected, air)
     row, col, n_colors = img.shape
 
     # Calculate radius(Eq.(5))
@@ -102,7 +56,7 @@ def non_local_transmission(img, air, gamma=1):
     # how to use the data in kdNode
     # print(lines[0][0][0].data[0])
 
-    ## Estimating Initial Transmission
+    # Estimating Initial Transmission
     # Estimate radius as the maximal radius in each haze-line (Eq. (11))
     maxRadius = np.zeros(row * col, dtype=np.float)
     for i in range(n_points):
@@ -175,76 +129,9 @@ def non_local_transmission(img, air, gamma=1):
 
     trans = np.reshape(transmission_estimation, (row, col), order='F')
 
-    transmission = wls_filter(trans, data_term_weight, img_hazy_corrected.astype(np.float32), lambd)
+    transmission = wls.wls_filter(trans, data_term_weight, img_hazy_corrected.astype(np.float32), lambd)
 
     return transmission
-
-
-def wls_filter(in_, data_term_weight, guidance, lambda_=0.05, small_num=0.00001):
-    h, w, _ = guidance.shape
-    k = h * w
-
-    guidance = cv2.cvtColor(guidance, cv2.COLOR_RGB2GRAY).tolist()
-
-    # Compute affinities between adjacent pixels based on gradients of guidance
-    dy = np.diff(guidance, axis=0)
-    dy = - lambda_ / (np.abs(dy) ** 2 + small_num)
-    dy = np.pad(dy, ([0, 1], [0, 0]), 'constant', constant_values=0)
-    dy = dy.flatten('F').T
-
-    dx = np.diff(guidance, axis=1)
-    dx = -lambda_ / (np.abs(dx) ** 2 + small_num)
-    dx = np.pad(dx, ([0, 0], [0, 1]), 'constant', constant_values=0)
-    dx = dx.flatten(order='F').T
-
-    B = np.vstack((dx, dy))
-    d = [-h, -1]
-    tmp = sparse.spdiags(B, d, k, k)
-    # row vector
-    ea = dx
-    temp = [dx]
-    we = np.pad(temp, ([0, 0], [h, 0]))[0]
-    we = we[0:len(we) - h]
-
-    # row vector
-    so = dy
-    temp = [dy]
-    no = np.pad(temp, ([0, 0], [1, 0]))[0]
-    no = no[0:len(no) - 1]
-
-    # row vector
-    D = -(ea + we + so + no)
-    Asmoothness = tmp + tmp.T + sparse.spdiags(D, 0, k, k)
-    # Normalize data weight
-    data_weight = data_term_weight - np.min(data_term_weight)
-
-    data_weight = data_weight / (np.max(data_weight) + small_num)
-
-    # Make sure we have a boundary condition for the top line:
-    # It will be the minimum of the transmission in each column
-    # With reliability 0.8
-    reliability_mask = np.where(data_weight[0] < 0.6, 1, 0)
-    in_row1 = np.min(in_, axis=0)
-    # print(reliability_mask)
-    for i in range(w):
-        if reliability_mask[i] == 1:
-            data_weight[0][i] = 0.8
-
-    for i in range(w):
-        if reliability_mask[i] == 1:
-            in_[0][i] = in_row1[i]
-
-    Adata = sparse.spdiags(data_weight.flatten(), 0, k, k)
-
-    A = Asmoothness + Adata
-
-    b = Adata * in_.flatten(order='F').T
-
-    X = spsolve(A, b)
-
-    out = np.reshape(X, [h, w], order='F')
-    np.savetxt("./out.txt", out, fmt="%0.5f", delimiter="\t")
-    return out
 
 
 # cluster into 1000length arr
@@ -256,23 +143,12 @@ def findPosition(kdNode, radius, cluster, points, r, cluster_Points):
             break
 
 
-def dark_channel_dehazing(img, transmission, air):
-    img = img / 255
-    air = air
-    row, col, _ = img.shape
-
-    result = np.empty_like(img, dtype=float)
-    for i in range(3):
-        result[:, :, i] = ((img[:, :, i] - air[i]) / transmission) + air[i]
-    return result
-
-
-def dehaze(img, img_gray, transmission_estimission, air):
+def dehaze(img, img_norm, transmission_estimission, air):
     h, w, n_colors = img.shape
     img_dehazed = np.zeros((h, w, n_colors), dtype=float)
     leave_haze = 1.06
     for color_idx in range(3):
-        img_dehazed[:, :, color_idx] = (img_gray[:, :, color_idx] - (1 - leave_haze * transmission_estimission) * air[
+        img_dehazed[:, :, color_idx] = (img_norm[:, :, color_idx] - (1 - leave_haze * transmission_estimission) * air[
             color_idx]) / np.maximum(transmission_estimission, 0.1)
 
     img_dehazed = np.where(img_dehazed > 1, 1, img_dehazed)
@@ -286,32 +162,20 @@ def dehaze(img, img_gray, transmission_estimission, air):
     return img_dehazed
 
 
-def adjust(img_dehazed, adj_percent):
-    minn = np.min(img_dehazed)
-    img_dehazed = img_dehazed - minn
-    maxx = np.max(img_dehazed)
-    img_dehazed = img_dehazed / maxx
-    return img_dehazed
-    # contrast_limit = stretchlim
-
-
 def main():
     img = cv2.imread(file_path)
     cv2.imshow("input_image", img)
-    img_gray = cv2.normalize(img.astype('float'), None, 0.0, 1.0,
+    img_norm = cv2.normalize(img.astype('float'), None, 0.0, 1.0,
                              cv2.NORM_MINMAX)  # Convert to normalized floating point
-    dark = dark_channel(img, filter_size)
-    air = air_light(img, dark)
+    dark = utils.dark_channel(img, filter_size)
+    air = utils.air_light(img, dark)
     air = air[0] / 255
 
-    # trans DCP
-    # trans = get_trans(img, dark / 255, air[0])
+    # Non-Local transmission
+    transmission_estimission = non_local_transmission(img_norm, air)
 
-    # trans Nonl-Local
-    transmission_estimission = non_local_transmission(img_gray, air)
+    clear_img = dehaze(img, img_norm, transmission_estimission, air)
 
-    clear_img = dehaze(img, img_gray, transmission_estimission, air)
-    # clear_img2 = non_local_dehazing(img, trans, air)
     cv2.imshow("result", clear_img)
     cv2.imshow("non-local transmission", transmission_estimission)
 
