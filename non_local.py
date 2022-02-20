@@ -5,7 +5,7 @@ import utils
 import regularization
 import hazer
 
-file_path = "/Users/joey777210/Downloads/OTS/0007_0.85_0.2.jpg"
+file_path = "/Users/joey777210/Documents/paper_img/test2.jpg"
 filter_size = 15
 # 修正参数, 每个簇都应该有一个，初始化为随机数，根据启发式算法调节
 p = 0

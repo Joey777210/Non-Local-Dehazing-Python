@@ -5,9 +5,9 @@ import non_local
 # 基因数量 = 分组数量
 gen_size = 1000
 # 迭代次数
-iterator_num = 50
+iterator_num = 5
 # 一代染色体种群大小
-generation_size = 10
+generation_size = 5
 # 适应度数组
 adaptability = []
 # 染色体复制的比例
@@ -64,6 +64,7 @@ def cross(generation):
     return new_generation
 
 
+# 变异
 def mutation(new_generation):
     # 随机找一条染色体
     chromosome_index = random.randint(0, crossover_num - 1)
@@ -187,6 +188,7 @@ def ga_search():
 
     # 迭代繁衍
     for itIndex in range(iterator_num):
+        print("第", itIndex, "次迭代开始 ")
         # 计算上一代各条染色体的适应度
         calAdaptability(generation)
         if advance_chromosome is not None and len(advance_chromosome) > 0:
@@ -199,7 +201,7 @@ def ga_search():
 
         # 生成新一代染色体
         generation = createGeneration(generation)
-        print("迭代次数： ", itIndex)
+        print("第", itIndex, "次迭代结束 ")
     max_adaptability_index = maxN(adaptability, 1)
 
     return generation[max_adaptability_index[0][0]]
