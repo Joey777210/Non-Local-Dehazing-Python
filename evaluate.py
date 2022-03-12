@@ -2,7 +2,7 @@
 import numpy as np
 import phasepack.phasecong as pc
 import cv2
-
+import os
 
 def _assert_image_shapes_equal(org_img: np.ndarray, pred_img: np.ndarray, metric: str):
     # shape of the image should be like this (rows, cols, bands)
@@ -131,14 +131,25 @@ def read_image(path: str):
 
 
 if __name__ == '__main__':
-    org_img_path = "./Pics/city_input.png"
-    pred_img_path = "Pics/city_result.png"
+    org_dir_path = "/Users/joey777210/Documents/论文相关/paper_img/对比实验/定性分析/真实图像org/"
+    pred_dir_path = "/Users/joey777210/Documents/论文相关/paper_img/对比实验/定性分析/真实图像/"
 
-    org_img = read_image(org_img_path)
-    pred_img = read_image(pred_img_path)
+    for filename in os.listdir(pred_dir_path):  # listdir的参数是文件夹的路径
+        if filename.startswith('.'): continue
 
-    psnr_out_value = float(psnr(org_img, pred_img))
-    fsim_out_value = float(fsim(org_img, pred_img))
+        pred_img_path = pred_dir_path + filename
+        pred_img = read_image(pred_img_path)
+        print("-----------", filename, "------------")
+        prefix = filename.split('_')[0]
+        org_img = None
+        for org_filename in os.listdir(org_dir_path):
+            if org_filename[:len(org_filename) - 4][4:] == prefix:
+                org_img = read_image(org_dir_path + org_filename)
 
-    print("psnr_out_value", psnr_out_value)
-    print("fsim_out_value", fsim_out_value)
+        if pred_img.shape[0] == 520:
+            org_img = cv2.resize(org_img, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+        psnr_out_value = float(psnr(org_img, pred_img))
+        fsim_out_value = float(fsim(org_img, pred_img))
+        print(filename + "\tpsnr_out_value\t", psnr_out_value)
+        print(filename + "\tfsim_out_value\t", fsim_out_value)
+
